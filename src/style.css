@@ -130,7 +130,7 @@ h3 { font-size: 1.02rem; line-height: 1.4; }
 .outline button[aria-current], .mobile-sections button[aria-current] { font-weight: 650; }
 .lesson { grid-column: 1; grid-row: 1; min-width: 0; padding: var(--space-lg); }
 .outline + .lesson { grid-column: 2; }
-.lesson .multiline, .course-hero .multiline, .resume p { max-width: var(--reading-width); }
+.course-hero .multiline, .resume p { max-width: var(--reading-width); }
 .lesson h1 { font-size: clamp(1.65rem, calc(1.2rem + 1.75vw), 3.1rem); }
 .lesson-section { margin-top: var(--space-lg); scroll-margin-top: 16px; }
 .lesson-section + .lesson-section { border-top: 1px solid var(--border); padding-top: var(--space-md); }
