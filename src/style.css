@@ -136,7 +136,7 @@ h3 { font-size: 1.02rem; line-height: 1.4; }
 .lesson-section + .lesson-section { border-top: 1px solid var(--border); padding-top: var(--space-md); }
 .block { margin-block: var(--space-md); overflow-wrap: anywhere; }
 .block h3 { margin-bottom: 7px; }
-.lesson .multiline { line-height: 1.7; }
+.lesson .multiline { font-size: 1.125rem; line-height: 1.7; }
 .multiline { white-space: pre-wrap; overflow-wrap: anywhere; }
 .block-example, .block-practice { padding: var(--space-md); border-radius: 12px; background: var(--example); }
 .block-example { border-left: 3px solid var(--accent); }
