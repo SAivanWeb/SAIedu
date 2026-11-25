@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton, NCollapse, NCollapseItem, NConfigProvider, NInput, NModal, NProgress, NTooltip, NDrawer, NDrawerContent, createDiscreteApi, darkTheme, ruRU, dateRuRU, type NotificationReactive } from 'naive-ui'
+import { NButton, NCollapse, NCollapseItem, NConfigProvider, NInput, NModal, NProgress, NPopover, NTooltip, NDrawer, NDrawerContent, createDiscreteApi, darkTheme, ruRU, dateRuRU, type NotificationReactive } from 'naive-ui'
 import { isComplete, lessonsOf, parseCourse, percentage, stepKey, stepsOf, type CourseStep, type Entry, type QuizAnswers } from './course'
 import CourseProgram from './CourseProgram.vue'
 import KnowledgeQuiz from './KnowledgeQuiz.vue'
@@ -26,15 +26,18 @@ const darkOverrides = {
   },
 }
 const appearances = [
-  { id: 'light', label: 'Светлая' },
-  { id: 'dark', label: 'Тёмная' },
-  { id: 'black-on-white', label: 'Чёрный на белом' },
-  { id: 'white-on-black', label: 'Белый на чёрном' },
-  { id: 'sepia', label: 'Сепия' },
+  { id: 'light', label: 'Светлая', icon: 'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M19 5l-1.4 1.4M6.4 17.6 5 19M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z' },
+  { id: 'dark', label: 'Тёмная', icon: 'M20.9 13.3A9 9 0 0 1 10.7 3.1 9 9 0 1 0 20.9 13.3Z' },
+  { id: 'black-on-white', label: 'Чёрный на белом', icon: 'M3 4h18v16H3zM7 9h10m-10 4h10m-10 4h6' },
+  { id: 'white-on-black', label: 'Белый на чёрном', icon: 'M3 4h18v16H3zM12 7a5 5 0 0 0 0 10z' },
+  { id: 'sepia', label: 'Сепия', icon: 'M12 6c-3-2-6-2-9-2v14c3 0 6 0 9 2 3-2 6-2 9-2V4c-3 0-6 0-9 2Zm0 0v14' },
 ] as const
 type Appearance = typeof appearances[number]['id']
 
 const appearance = ref<Appearance>(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+const themePopoverOpen = ref(false)
+const themeButton = ref<InstanceType<typeof NButton>>()
+const currentAppearance = computed(() => appearances.find(option => option.id === appearance.value) ?? appearances[0])
 const outlineOpen = ref(true)
 const sectionIndex = ref(0)
 const programOpen = ref(false)
@@ -50,6 +53,16 @@ try {
   if (saved) appearance.value = saved.id
   outlineOpen.value = localStorage.getItem('saiedu-outline-open') !== 'false'
 } catch {}
+
+function closeThemePopover() {
+  themePopoverOpen.value = false
+  themeButton.value?.$el.focus()
+}
+
+function chooseAppearance(value: Appearance) {
+  appearance.value = value
+  closeThemePopover()
+}
 
 watch(outlineOpen, value => {
   try { localStorage.setItem('saiedu-outline-open', String(value)) } catch {}
@@ -491,12 +504,33 @@ function countLessons(count: number) {
     <header v-if="!stopped" class="topbar" :inert="stopping">
       <div class="topbar-inner">
         <a class="brand" href="#/" aria-label="SAIedu, главная" :aria-current="!selected ? 'page' : undefined"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span> SAI<span>edu</span></a>
-        <label class="theme-control">
-          <span>Тема</span>
-          <select v-model="appearance">
-            <option v-for="option in appearances" :key="option.id" :value="option.id">{{ option.label }}</option>
-          </select>
-        </label>
+        <NPopover v-model:show="themePopoverOpen" trigger="click" placement="bottom-end" :to="false">
+          <template #trigger>
+            <NButton ref="themeButton" class="theme-button" size="large" circle secondary
+              :aria-label="'Выбрать тему. Текущая тема — ' + currentAppearance.label"
+              :aria-expanded="themePopoverOpen" @keydown.esc="closeThemePopover">
+              <template #icon>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path :d="currentAppearance.icon" />
+                </svg>
+              </template>
+            </NButton>
+          </template>
+          <div class="theme-options" role="group" aria-label="Темы оформления" @keydown.esc.stop="closeThemePopover">
+            <NButton v-for="option in appearances" :key="option.id" block
+              :secondary="appearance === option.id" :quaternary="appearance !== option.id"
+              :aria-pressed="appearance === option.id" @click="chooseAppearance(option.id)">
+              <template #icon>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path :d="option.icon" />
+                </svg>
+              </template>
+              {{ option.label }}
+            </NButton>
+          </div>
+        </NPopover>
         <NTooltip v-if="managedApp" placement="bottom">
           <template #trigger>
             <NButton size="large" circle secondary aria-label="Обновить SAIedu"
@@ -617,13 +651,7 @@ function countLessons(count: number) {
             <span v-if="lesson">Урок {{ lessonIndex + 1 }} из {{ lessons.length }}</span>
             <span v-else>Проверка знаний</span>
           </div>
-          <div class="lesson-toolbar-actions">
-            <div v-if="lesson && lesson.sections.length > 1" class="outline-toggle">
-              <NButton secondary :aria-expanded="outlineOpen" aria-controls="lesson-outline"
-                @click="outlineOpen = !outlineOpen">{{ outlineOpen ? 'Скрыть оглавление' : 'Показать оглавление' }}</NButton>
-            </div>
-            <NButton secondary :aria-expanded="programOpen" @click="programOpen = true">Программа курса</NButton>
-          </div>
+          <NButton secondary :aria-expanded="programOpen" @click="programOpen = true">Программа курса</NButton>
         </div>
         <NDrawer v-model:show="programOpen" :width="'min(100vw, clamp(20rem, 32vw, 34rem))'" placement="right">
           <NDrawerContent title="Программа курса" closable>
@@ -638,15 +666,29 @@ function countLessons(count: number) {
           :saved="quizResult(selected, quiz.id)" :next-url="courseUrl(selected, next && stepKey(next))"
           :next-label="next ? (next.kind === 'quiz' ? 'Следующая проверка знаний' : 'Следующий урок') : 'К программе курса'"
           @submit="saveQuizResult" />
-        <div v-else-if="lesson" class="learning" :class="{ 'with-outline': outlineOpen && lesson.sections.length > 1 }">
-          <nav v-if="lesson.sections.length > 1" v-show="outlineOpen" id="lesson-outline" class="outline" aria-label="Разделы урока">
-            <strong>В этом уроке</strong>
-            <ul>
-              <li v-for="(section, index) in lesson.sections" :key="index">
-                <button type="button" :aria-current="sectionIndex === index ? 'location' : undefined" @click="jumpToSection(index)">{{ section.title }}</button>
-              </li>
-            </ul>
-          </nav>
+        <div v-else-if="lesson" class="learning"
+          :class="{ 'with-outline': lesson.sections.length > 1, 'outline-collapsed': !outlineOpen }">
+          <aside v-if="lesson.sections.length > 1" class="lesson-sidebar" aria-label="Оглавление урока">
+            <div class="outline-header">
+              <strong v-if="outlineOpen">В этом уроке</strong>
+              <NButton secondary circle
+                :aria-label="outlineOpen ? 'Скрыть оглавление' : 'Показать оглавление'"
+                :aria-expanded="outlineOpen" aria-controls="lesson-outline" @click="outlineOpen = !outlineOpen">
+                <template #icon>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 5h18v14H3zM9 5v14" />
+                    <path :d="outlineOpen ? 'm16 9-3 3 3 3' : 'm13 9 3 3-3 3'" />
+                  </svg>
+                </template>
+              </NButton>
+            </div>
+            <nav v-show="outlineOpen" id="lesson-outline" class="outline" aria-label="Разделы урока">
+              <NButton v-for="(section, index) in lesson.sections" :key="index" block
+                :secondary="sectionIndex === index" :quaternary="sectionIndex !== index"
+                :aria-current="sectionIndex === index ? 'location' : undefined" @click="jumpToSection(index)">{{ section.title }}</NButton>
+            </nav>
+          </aside>
           <article ref="lessonArticle" :key="selected.course.id + '/' + lesson.id" class="lesson">
             <header class="heading">
               <h1 tabindex="-1">{{ lesson.title }}</h1>
@@ -654,8 +696,9 @@ function countLessons(count: number) {
             <NCollapse v-if="lesson.sections.length > 1" class="mobile-sections">
               <NCollapseItem name="sections" title="Разделы урока">
                 <nav aria-label="Разделы урока">
-                  <button v-for="(section, index) in lesson.sections" :key="index" type="button"
-                    :aria-current="sectionIndex === index ? 'location' : undefined" @click="jumpToSection(index)">{{ section.title }}</button>
+                  <NButton v-for="(section, index) in lesson.sections" :key="index" block
+                    :secondary="sectionIndex === index" :quaternary="sectionIndex !== index"
+                    :aria-current="sectionIndex === index ? 'location' : undefined" @click="jumpToSection(index)">{{ section.title }}</NButton>
                 </nav>
               </NCollapseItem>
             </NCollapse>
