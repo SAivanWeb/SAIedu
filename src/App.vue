@@ -25,7 +25,17 @@ const darkOverrides = {
     textColorPressedPrimary: '#12281d', textColorFocusPrimary: '#12281d',
   },
 }
-const appearance = ref(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+const appearances = [
+  { id: 'light', label: 'Светлая' },
+  { id: 'dark', label: 'Тёмная' },
+  { id: 'black-on-white', label: 'Чёрный на белом' },
+  { id: 'white-on-black', label: 'Белый на чёрном' },
+  { id: 'sepia', label: 'Сепия' },
+] as const
+type Appearance = typeof appearances[number]['id']
+
+const appearance = ref<Appearance>(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+const outlineOpen = ref(true)
 const sectionIndex = ref(0)
 const programOpen = ref(false)
 const lessonArticle = ref<HTMLElement>()
@@ -36,23 +46,45 @@ let pendingSave = Promise.resolve(true)
 const unsavedChanges: LibraryChange[] = []
 
 try {
-  const saved = localStorage.getItem('saiedu-theme')
-  if (saved === 'dark' || saved === 'light') appearance.value = saved
+  const saved = appearances.find(option => option.id === localStorage.getItem('saiedu-theme'))
+  if (saved) appearance.value = saved.id
+  outlineOpen.value = localStorage.getItem('saiedu-outline-open') !== 'false'
 } catch {}
 
-function toggleTheme() {
-  appearance.value = appearance.value === 'dark' ? 'light' : 'dark'
-  try { localStorage.setItem('saiedu-theme', appearance.value) } catch {}
-}
+watch(outlineOpen, value => {
+  try { localStorage.setItem('saiedu-outline-open', String(value)) } catch {}
+})
 
 watch(appearance, value => {
   document.documentElement.dataset.theme = value
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', value === 'dark' ? '#121a17' : '#eef2ee')
-}, { immediate: true })
+  const canvas = getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim()
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
+  try { localStorage.setItem('saiedu-theme', value) } catch {}
+}, { immediate: true, flush: 'sync' })
+
+function readingOverrides() {
+  const style = getComputedStyle(document.documentElement)
+  const color = (name: string) => style.getPropertyValue(name).trim()
+  return {
+    common: {
+      ...theme.common,
+      primaryColor: color('--accent'), primaryColorHover: color('--muted'),
+      primaryColorPressed: color('--accent'), primaryColorSuppl: color('--muted'),
+      bodyColor: color('--canvas'), cardColor: color('--paper'), modalColor: color('--paper'),
+      popoverColor: color('--paper'), inputColor: color('--paper'), borderColor: color('--border'),
+      dividerColor: color('--border'), hoverColor: color('--tint'),
+      textColor1: color('--ink'), textColor2: color('--ink'), textColor3: color('--muted'),
+    },
+    Button: {
+      textColorPrimary: color('--paper'), textColorHoverPrimary: color('--paper'),
+      textColorPressedPrimary: color('--paper'), textColorFocusPrimary: color('--paper'),
+    },
+  }
+}
 
 const configProviderProps = computed(() => ({
-  theme: appearance.value === 'dark' ? darkTheme : null,
-  themeOverrides: appearance.value === 'dark' ? darkOverrides : theme,
+  theme: appearance.value === 'dark' || appearance.value === 'white-on-black' ? darkTheme : null,
+  themeOverrides: appearance.value === 'dark' ? darkOverrides : appearance.value === 'light' ? theme : readingOverrides(),
   locale: ruRU,
   dateLocale: dateRuRU,
 }))
@@ -459,25 +491,12 @@ function countLessons(count: number) {
     <header v-if="!stopped" class="topbar" :inert="stopping">
       <div class="topbar-inner">
         <a class="brand" href="#/" aria-label="SAIedu, главная" :aria-current="!selected ? 'page' : undefined"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span> SAI<span>edu</span></a>
-        <NTooltip placement="bottom">
-          <template #trigger>
-            <NButton class="theme-button" size="large" circle secondary
-              :aria-label="appearance === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'"
-              @click="toggleTheme">
-              <template #icon>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
-                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <g v-if="appearance === 'dark'">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M19 5l-1.4 1.4M6.4 17.6 5 19" />
-                  </g>
-                  <path v-else d="M20.9 13.3A9 9 0 0 1 10.7 3.1 9 9 0 1 0 20.9 13.3Z" />
-                </svg>
-              </template>
-            </NButton>
-          </template>
-          {{ appearance === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему' }}
-        </NTooltip>
+        <label class="theme-control">
+          <span>Тема</span>
+          <select v-model="appearance">
+            <option v-for="option in appearances" :key="option.id" :value="option.id">{{ option.label }}</option>
+          </select>
+        </label>
         <NTooltip v-if="managedApp" placement="bottom">
           <template #trigger>
             <NButton size="large" circle secondary aria-label="Обновить SAIedu"
@@ -598,7 +617,13 @@ function countLessons(count: number) {
             <span v-if="lesson">Урок {{ lessonIndex + 1 }} из {{ lessons.length }}</span>
             <span v-else>Проверка знаний</span>
           </div>
-          <NButton secondary :aria-expanded="programOpen" @click="programOpen = true">Программа курса</NButton>
+          <div class="lesson-toolbar-actions">
+            <div v-if="lesson && lesson.sections.length > 1" class="outline-toggle">
+              <NButton secondary :aria-expanded="outlineOpen" aria-controls="lesson-outline"
+                @click="outlineOpen = !outlineOpen">{{ outlineOpen ? 'Скрыть оглавление' : 'Показать оглавление' }}</NButton>
+            </div>
+            <NButton secondary :aria-expanded="programOpen" @click="programOpen = true">Программа курса</NButton>
+          </div>
         </div>
         <NDrawer v-model:show="programOpen" :width="'min(100vw, clamp(20rem, 32vw, 34rem))'" placement="right">
           <NDrawerContent title="Программа курса" closable>
@@ -613,8 +638,8 @@ function countLessons(count: number) {
           :saved="quizResult(selected, quiz.id)" :next-url="courseUrl(selected, next && stepKey(next))"
           :next-label="next ? (next.kind === 'quiz' ? 'Следующая проверка знаний' : 'Следующий урок') : 'К программе курса'"
           @submit="saveQuizResult" />
-        <div v-else-if="lesson" class="learning">
-          <nav v-if="lesson.sections.length > 1" class="outline" aria-label="Разделы урока">
+        <div v-else-if="lesson" class="learning" :class="{ 'with-outline': outlineOpen && lesson.sections.length > 1 }">
+          <nav v-if="lesson.sections.length > 1" v-show="outlineOpen" id="lesson-outline" class="outline" aria-label="Разделы урока">
             <strong>В этом уроке</strong>
             <ul>
               <li v-for="(section, index) in lesson.sections" :key="index">
